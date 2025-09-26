@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-dotenv
+motor
+pymongo
+sentence-transformers
+huggingface_hub
+google-generativeai
+pandas
+PyPDF2
+python-multipart
+openpyxl
