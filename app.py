@@ -802,7 +802,7 @@ async def delete_system_prompt(prompt_id: str):
         if prompt_to_delete.get("is_default", False):
             raise HTTPException(status_code=400, detail="Cannot delete default prompt")
         
-        # Check if the prompt to be deleted is currently active
+        # Check if the prompt to be deleted is currently active or not
         is_active_prompt = prompt_to_delete.get("is_active", False)
         
         # Delete the prompt
