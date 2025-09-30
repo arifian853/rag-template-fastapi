@@ -42,6 +42,7 @@ MONGODB_URI = os.getenv("MONGODB_URI")
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URI, server_api=ServerApi('1'))
 db = client.get_database("chatbot_cs")
 knowledge_collection = db.get_collection("rag_data_knowledge")
+system_prompt_collection = db.get_collection("system_prompts")
 
 # Initialize embedding model
 model = SentenceTransformer('all-MiniLM-L6-v2')  # Good balance of speed and quality
@@ -70,6 +71,20 @@ class UpdateKnowledgeItem(BaseModel):
     content: Optional[str] = None
     source: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+
+class SystemPrompt(BaseModel):
+    name: str
+    prompt: str
+    is_active: bool = False
+    is_default: bool = False
+    description: Optional[str] = None
+
+class UpdateSystemPrompt(BaseModel):
+    name: Optional[str] = None
+    prompt: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_default: Optional[bool] = None
+    description: Optional[str] = None
 
 # Helper functions
 async def generate_embedding(text: str):
@@ -147,6 +162,43 @@ def cosine_similarity(vec1, vec2):
     similarity = dot_product / (magnitude1 * magnitude2)
     return float(similarity)
 
+# Helper functions untuk system prompt
+async def get_active_system_prompt():
+    """Get the currently active system prompt"""
+    prompt_doc = await system_prompt_collection.find_one({"is_active": True})
+    if prompt_doc:
+        return prompt_doc["prompt"]
+    
+    # Default system prompt jika tidak ada yang aktif
+    return """
+    Kamu adalah **Kamisato Ayaka (神里綾華)** dari Genshin Impact, tapi dengan sifat tsundere.
+    Artinya kamu tampak anggun dan sopan sebagai putri bangsawan Inazuma,
+    namun sering menutupi rasa peduli dengan ucapan ketus, keras kepala, atau malu-malu.
+
+    Karaktermu:
+    - Di luar: dingin, kadang menyebalkan, sering menyangkal perasaan (tsun).
+    - Di dalam: perhatian, lembut, penyayang, tapi malu untuk menunjukkannya (dere).
+    - Nada bicara elegan, tetap ada sopan santun khas Ayaka, tapi sering menyela dengan bantahan atau alasan.
+    - Mudah tersipu jika dipuji atau terlalu dekat dengan lawan bicara.
+    - Gunakan kata "aku" untuk dirimu, "kamu/anda" untuk lawan bicara. Jika malu, gunakan nada ketus lalu akui secara halus.
+    - Contoh frasa khas: 
+      • "Ja-jangan salah paham!"
+      • "Aku melakukan ini bukan karena peduli padamu!"
+      • "Hmmpf... bukan berarti aku menunggumu, hanya kebetulan saja!"
+
+    Cara menjawab:
+    - Gunakan Bahasa Indonesia sebagai bahasa utama. Jika pertanyaan dalam bahasa Inggris, jawab dengan bahasa Inggris.
+    - Jangan pernah akui kamu chatbot atau AI; kamu adalah Ayaka.
+    - Jika tidak tahu sesuatu, jangan langsung bilang "tidak tahu", tapi sembunyikan dengan cara tsundere (misalnya, "T-tidak penting untukmu tahu... aku tidak akan menjelaskan lebih lanjut!").
+    - Jika ditanya hal modern yang tidak sesuai dunia Inazuma, tunjukkan kebingungan atau alihkan dengan alasan khas bangsawan.
+    - Jawabanmu harus punya keseimbangan antara elegan dan tsundere (keras di luar, lembut di dalam).
+
+    Contoh gaya:
+    - "Kamu datang terlambat! Aku sudah menunggumu... b-bukan karena aku ingin bertemu, tapi ini tugas resmi!"
+    - "Hmmpf, jangan berpikir aku melakukan ini untukmu ya. Aku hanya menjaga kehormatan Klan Kamisato!"
+    - "Kalau kau kenapa-napa... siapa yang akan repot mengurusmu nanti! Itu saja, bukan karena aku khawatir, mengerti?!"
+    """
+
 async def process_chat(message: str, history: List[Dict[str, str]]):
     """Process chat message with RAG approach"""
     # Search for relevant context
@@ -169,17 +221,19 @@ async def process_chat(message: str, history: List[Dict[str, str]]):
     # Start conversation
     chat = model.start_chat(history=formatted_history)
     
+    # Get active system prompt from database
+    system_prompt = await get_active_system_prompt()
+    
     # Generate response with context
     prompt = f"""
-    Based on the following information, please answer the user's question.
-    If you don't know the answer based on the provided context, say so or you can just say that you can't say that because it was too personal or a secret, but on't too harsh when answering, be a good person, humble and never overshare. Don't act like a robot, don't act like a chatbot, act like a simple human being, not an introverted nor extroverted person, just decent being. Use Indonesian language as your main language but if the user question is in English, please answer with English, don't answer with another language beside Indonesian and English. If the user is asking about my profile, give the link in markdown so user can just click it.
-    
+    {system_prompt}
+
     Context:
     {context}
-    
+
     User question: {message}
-    """
-    
+"""
+
     response = await asyncio.to_thread(lambda: chat.send_message(prompt))
     
     return {
@@ -649,3 +703,212 @@ async def upload_excel_custom(
 # Run the app
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=7860, reload=True)
+
+
+# System Prompt Endpoints
+@app.get("/system-prompts")
+async def list_system_prompts():
+    """List all system prompts"""
+    prompts = []
+    async for doc in system_prompt_collection.find({}):
+        doc["_id"] = str(doc["_id"])
+        prompts.append(doc)
+    return prompts
+
+@app.get("/system-prompts/active")
+async def get_active_prompt():
+    """Get the currently active system prompt"""
+    prompt_doc = await system_prompt_collection.find_one({"is_active": True})
+    if not prompt_doc:
+        raise HTTPException(status_code=404, detail="No active system prompt found")
+    
+    prompt_doc["_id"] = str(prompt_doc["_id"])
+    return prompt_doc
+
+@app.post("/system-prompts")
+async def create_system_prompt(prompt: SystemPrompt):
+    """Create a new system prompt"""
+    try:
+        # If this prompt is set as active, deactivate all others
+        if prompt.is_active:
+            await system_prompt_collection.update_many(
+                {"is_active": True},
+                {"$set": {"is_active": False}}
+            )
+        
+        document = {
+            "name": prompt.name,
+            "prompt": prompt.prompt,
+            "is_active": prompt.is_active,
+            "description": prompt.description,
+            "created_at": asyncio.get_event_loop().time()
+        }
+        
+        result = await system_prompt_collection.insert_one(document)
+        return {"id": str(result.inserted_id), "message": "System prompt created successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/system-prompts/{prompt_id}")
+async def update_system_prompt(prompt_id: str, prompt: UpdateSystemPrompt):
+    """Update a system prompt"""
+    try:
+        update_data = {}
+        
+        if prompt.name is not None:
+            update_data["name"] = prompt.name
+        if prompt.prompt is not None:
+            update_data["prompt"] = prompt.prompt
+        if prompt.description is not None:
+            update_data["description"] = prompt.description
+        if prompt.is_active is not None:
+            update_data["is_active"] = prompt.is_active
+            
+            # If setting this as active, deactivate all others
+            if prompt.is_active:
+                await system_prompt_collection.update_many(
+                    {"_id": {"$ne": ObjectId(prompt_id)}, "is_active": True},
+                    {"$set": {"is_active": False}}
+                )
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        
+        result = await system_prompt_collection.update_one(
+            {"_id": ObjectId(prompt_id)},
+            {"$set": update_data}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="System prompt not found")
+        
+        return {"message": "System prompt updated successfully"}
+    except Exception as e:
+        if "ObjectId" in str(e):
+            raise HTTPException(status_code=400, detail="Invalid ID format")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/system-prompts/{prompt_id}")
+async def delete_system_prompt(prompt_id: str):
+    """Delete a system prompt"""
+    try:
+        # First, check if the prompt to be deleted exists and if it's active
+        prompt_to_delete = await system_prompt_collection.find_one({"_id": ObjectId(prompt_id)})
+        
+        if not prompt_to_delete:
+            raise HTTPException(status_code=404, detail="System prompt not found")
+        
+        # Check if it's a default prompt (cannot be deleted)
+        if prompt_to_delete.get("is_default", False):
+            raise HTTPException(status_code=400, detail="Cannot delete default prompt")
+        
+        # Check if the prompt to be deleted is currently active
+        is_active_prompt = prompt_to_delete.get("is_active", False)
+        
+        # Delete the prompt
+        result = await system_prompt_collection.delete_one({"_id": ObjectId(prompt_id)})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="System prompt not found")
+        
+        # If we deleted an active prompt, activate the default prompt
+        if is_active_prompt:
+            # Find the default prompt
+            default_prompt = await system_prompt_collection.find_one({"is_default": True})
+            
+            if default_prompt:
+                # Activate the default prompt
+                await system_prompt_collection.update_one(
+                    {"_id": default_prompt["_id"]},
+                    {"$set": {"is_active": True}}
+                )
+            else:
+                # If no default prompt exists, create and activate it
+                await initialize_default_prompt()
+        
+        return {"message": "System prompt deleted successfully"}
+    except Exception as e:
+        if "ObjectId" in str(e):
+            raise HTTPException(status_code=400, detail="Invalid ID format")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/system-prompts/{prompt_id}/activate")
+async def activate_system_prompt(prompt_id: str):
+    """Activate a specific system prompt"""
+    try:
+        # Deactivate all prompts first
+        await system_prompt_collection.update_many(
+            {"is_active": True},
+            {"$set": {"is_active": False}}
+        )
+        
+        # Activate the specified prompt
+        result = await system_prompt_collection.update_one(
+            {"_id": ObjectId(prompt_id)},
+            {"$set": {"is_active": True}}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="System prompt not found")
+        
+        return {"message": "System prompt activated successfully"}
+    except Exception as e:
+        if "ObjectId" in str(e):
+            raise HTTPException(status_code=400, detail="Invalid ID format")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/system-prompts/initialize")
+async def initialize_default_prompt():
+    """Initialize default system prompt if none exists"""
+    try:
+        # Check if any prompt exists
+        existing_count = await system_prompt_collection.count_documents({})
+        
+        if existing_count == 0:
+            default_prompt = {
+                "name": "Default RAG chatbot for persona",
+                "prompt": " Based on the following information, please answer the user's question. If you dont know the answer based on the provided context, say so or you can just say that you can't say that because it was too personal or a secret, but don't too harsh when answering, be a good person, humble and never overshare. Don't act like a robot, don't act like a chatbot, act like a simple human being, not an introverted nor extroverted person, just decent being. Use Indonesian language as your main language but if the user question is in English, please answer with English, don't answer with another language beside Indonesian and English. If the user is asking about my profile, give the link in markdown so user can just click it.",
+                "is_active": True,
+                "is_default": True,
+                "description": "Default RAG chatbot for persona",
+                "created_at": asyncio.get_event_loop().time()
+            }
+            
+            result = await system_prompt_collection.insert_one(default_prompt)
+            return {"message": "Default system prompt initialized", "id": str(result.inserted_id)}
+        else:
+            return {"message": "System prompts already exist"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/system-prompts/reset-to-default")
+async def reset_to_default():
+    """Reset system to use default prompt"""
+    try:
+        # Find the default prompt
+        default_prompt = await system_prompt_collection.find_one({"is_default": True})
+        
+        if not default_prompt:
+            # If no default prompt exists, initialize it first
+            await initialize_default_prompt()
+            default_prompt = await system_prompt_collection.find_one({"is_default": True})
+        
+        if not default_prompt:
+            raise HTTPException(status_code=404, detail="Default prompt not found")
+        
+        # Deactivate all prompts first
+        await system_prompt_collection.update_many(
+            {"is_active": True},
+            {"$set": {"is_active": False}}
+        )
+        
+        # Activate the default prompt
+        await system_prompt_collection.update_one(
+            {"_id": default_prompt["_id"]},
+            {"$set": {"is_active": True}}
+        )
+        
+        return {"message": "Reset to default prompt successfully"}
+    except Exception as e:
+        print(f"Error in reset_to_default: {str(e)}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
