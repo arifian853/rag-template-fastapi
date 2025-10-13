@@ -14,3 +14,6 @@ cloudinary
 pdf2image
 pytesseract
 Pillow
+python-jose[cryptography]
+werkzeug
+python-multipart

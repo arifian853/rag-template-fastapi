@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, File, UploadFile, Form, Response
+from fastapi import APIRouter, HTTPException, File, UploadFile, Form, Response, Depends
 from models import KnowledgeItem
 from services.knowledge_service import add_knowledge
 from services.file_service import save_file_metadata
@@ -16,12 +16,13 @@ import cloudinary
 import cloudinary.uploader
 from datetime import datetime
 from utils.embedding import generate_embedding
+from .auth_route import get_current_user
 
 router = APIRouter()
 
 # File upload endpoints (dapat diakses dengan atau tanpa prefix)
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload file, save to Cloudinary, and create knowledge entries with OCR support"""
     try:
         file_content = await file.read()
@@ -244,7 +245,7 @@ async def upload_excel_custom(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/")
-async def list_files():
+async def list_files(current_user: dict = Depends(get_current_user)):
     """List all uploaded files"""
     try:
         files = []
@@ -259,7 +260,7 @@ async def list_files():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{file_id}")
-async def get_file(file_id: str):
+async def get_file(file_id: str, current_user: dict = Depends(get_current_user)):
     """Get specific file metadata"""
     try:
         file_doc = await files_collection.find_one({"_id": ObjectId(file_id)})
@@ -276,7 +277,7 @@ async def get_file(file_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{file_id}")
-async def delete_file(file_id: str):
+async def delete_file(file_id: str, current_user: dict = Depends(get_current_user)):
     """Delete file from Cloudinary and database"""
     try:
         # Get file metadata

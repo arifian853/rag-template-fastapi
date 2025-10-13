@@ -19,6 +19,7 @@ db = client.get_database("chatbot_cs")
 knowledge_collection = db.get_collection("rag_data_knowledge")
 system_prompt_collection = db.get_collection("system_prompts")
 files_collection = db.get_collection("files")
+users_collection = db.get_collection("users")
 
 # Configure Cloudinary
 cloudinary.config(
@@ -32,3 +33,12 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Configure Google Gemini
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# JWT configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-this-in-production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Function untuk compatibility dengan auth routes
+async def get_database():
+    return db

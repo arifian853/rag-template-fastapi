@@ -1,14 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from models import SystemPrompt, UpdateSystemPrompt
 from services.system_prompt_service import get_active_system_prompt, initialize_default_prompt, ensure_default_prompt_exists
 from config import system_prompt_collection
 from bson import ObjectId
 import asyncio
+from .auth_route import get_current_user
 
 router = APIRouter()
 
 @router.get("/")
-async def list_system_prompts():
+async def list_system_prompts(current_user: dict = Depends(get_current_user)):
     """List all system prompts"""
     prompts = []
     async for doc in system_prompt_collection.find({}):
@@ -17,7 +18,7 @@ async def list_system_prompts():
     return prompts
 
 @router.get("/active")
-async def get_active_prompt():
+async def get_active_prompt(current_user: dict = Depends(get_current_user)):
     """Get the currently active system prompt"""
     prompt_doc = await system_prompt_collection.find_one({"is_active": True})
     if not prompt_doc:
@@ -27,7 +28,7 @@ async def get_active_prompt():
     return prompt_doc
 
 @router.post("/")
-async def create_system_prompt(prompt: SystemPrompt):
+async def create_system_prompt(prompt: SystemPrompt, current_user: dict = Depends(get_current_user)):
     """Create a new system prompt"""
     try:
         # If this prompt is set as active, deactivate all others
@@ -51,7 +52,7 @@ async def create_system_prompt(prompt: SystemPrompt):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{prompt_id}")
-async def update_system_prompt(prompt_id: str, prompt: UpdateSystemPrompt):
+async def update_system_prompt(prompt_id: str, prompt_data: UpdateSystemPrompt, current_user: dict = Depends(get_current_user)):
     """Update a system prompt"""
     try:
         update_data = {}
@@ -90,7 +91,7 @@ async def update_system_prompt(prompt_id: str, prompt: UpdateSystemPrompt):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{prompt_id}")
-async def delete_system_prompt(prompt_id: str):
+async def delete_system_prompt(prompt_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a system prompt"""
     try:
         # First, check if the prompt to be deleted exists and if it's active
@@ -130,7 +131,7 @@ async def delete_system_prompt(prompt_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{prompt_id}/activate")
-async def activate_system_prompt(prompt_id: str):
+async def activate_system_prompt(prompt_id: str, current_user: dict = Depends(get_current_user)):
     """Activate a specific system prompt"""
     try:
         # Deactivate all prompts first
@@ -164,7 +165,7 @@ async def initialize_default_prompt_endpoint():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reset-to-default")
-async def reset_to_default():
+async def reset_to_default(current_user: dict = Depends(get_current_user)):
     """Reset system to use default prompt - auto-create if not exists"""
     try:
         # Ensure default prompt exists (create if not)

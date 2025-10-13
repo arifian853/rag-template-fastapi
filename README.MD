@@ -17,10 +17,26 @@ Backend API untuk sistem manajemen pengetahuan dengan teknologi Retrieval-Augmen
 ## 🚀 Fitur Utama
 
 ### 📚 Knowledge Management
-- **CRUD Operations**: Create, Read, Update, Delete knowledge items
-- **Pagination**: Dukungan pagination dengan sorting (newest/oldest)
-- **Vector Search**: Pencarian semantik menggunakan embeddings
-- **Metadata Support**: Penyimpanan metadata untuk setiap knowledge item
+- Knowledge Management
+  - CRUD knowledge: create, read, update, delete
+  - Pagination & sorting
+  - Embedding & similarity search
+- Chat AI (RAG)
+  - Endpoint chat dengan konteks dari knowledge base
+  - Mendukung chat history
+- File Processing
+  - Upload & kelola file: PDF, TXT, CSV, Excel
+  - Ekstraksi teks (OCR untuk PDF gambar)
+  - Metadata & tautan unduh
+- System Prompt Manager
+  - Kelola prompt (create, update, delete)
+  - Set aktif/default, inisialisasi & reset ke default
+- Autentikasi
+  - Login JWT, verifikasi token
+  - CRUD pengguna & endpoint `me`
+- Infrastruktur
+  - CORS untuk frontend (`http://localhost:5173`)
+  - Docker Compose siap pakai
 
 ### 🤖 AI Chat System
 - **RAG Implementation**: Retrieval-Augmented Generation dengan Google Gemini
@@ -49,19 +65,33 @@ Backend API untuk sistem manajemen pengetahuan dengan teknologi Retrieval-Augmen
 - **File Processing**: PyPDF2, pandas, openpyxl
 - **Deployment**: Docker & Docker Compose
 - **Environment**: Python 3.11+
+- **Cloudinary**: Untuk penyimpanan file
+- **JWT (python-jose)**: Autentikasi dan verifikasi token
+- **Hashing (werkzeug)**: Penyimpanan password dengan hashing
 
 ## 📁 Struktur Proyek
 
 ```
 rag/
-├── app.py                 # Main FastAPI application
-├── create_index.py        # MongoDB vector index setup
-├── requirements.txt       # Python dependencies
-├── Dockerfile            # Docker configuration
-├── docker-compose.yml    # Docker Compose setup
-├── .env.example          # Environment variables template
-├── .gitignore           # Git ignore rules
-└── .dockerignore        # Docker ignore rules
+├── app.py                 # Main FastAPI app + CORS + router include
+├── config.py              # Koneksi DB, env vars, koleksi
+├── routes/                # Endpoint routers
+│   ├── auth_route.py      # Auth & users
+│   ├── knowledge_routes.py# Knowledge CRUD
+│   ├── chat_routes.py     # Chat RAG
+│   ├── file_routes.py     # Upload & file management
+│   └── system_prompt_routes.py # System prompts
+├── services/              # Business logic
+│   ├── auth_service.py
+│   ├── chat_service.py
+│   ├── file_service.py
+│   ├── knowledge_service.py
+│   └── system_prompt_service.py
+├── utils/                 # Helpers (embedding, OCR, cloudinary)
+├── create_index.py        # Setup vektor index Mongo
+├── requirements.txt       # Dependencies
+├── docker-compose.yml     # Deployment dengan Docker
+└── README.MD              # Dokumentasi
 ```
 
 ## 🚀 Quick Start
@@ -70,6 +100,10 @@ rag/
 - Python 3.11+
 - MongoDB Atlas account atau MongoDB local
 - Google AI API Key
+- Cloudinary account
+- JWT secret key (dapat di-generate dengan `openssl rand -hex 32` atau random string yang aman)
+- Cloudinary credentials (cloud name, API key, API secret)
+
 
 ### 1. Clone & Setup
 ```bash
@@ -112,75 +146,60 @@ GOOGLE_API_KEY=your_google_ai_api_key_here
 
 ## 📡 API Endpoints
 
-### Knowledge Management
+### Auth (`/auth`)
 
-#### GET `/knowledge`
-List knowledge items dengan pagination
-```json
-{
-  "page": 1,
-  "limit": 15,
-  "sort_order": "newest"
-}
-```
+- POST `/auth/login`
+- POST `/auth/verify-token`
+- GET `/auth/me`
+- GET `/auth/users`
+- POST `/auth/users`
+- PUT `/auth/users/{user_id}`
+- DELETE `/auth/users/{user_id}`
 
-#### POST `/add-knowledge`
-Tambah knowledge item baru
-```json
-{
-  "title": "Judul Knowledge",
-  "content": "Konten knowledge...",
-  "source": "manual",
-  "metadata": {}
-}
-```
+Beberapa endpoint memerlukan header `Authorization: Bearer <token>`.
 
-#### GET `/knowledge/{knowledge_id}`
-Get knowledge item by ID
+### Knowledge
 
-#### PUT `/knowledge/{knowledge_id}`
-Update knowledge item
-```json
-{
-  "title": "Updated Title",
-  "content": "Updated content...",
-  "metadata": {}
-}
-```
+- GET `/knowledge` — list (pagination, sorting)
+- GET `/knowledge/all` — list semua
+- POST `/add-knowledge` — tambah knowledge
+- GET `/knowledge/{knowledge_id}` — detail
+- PUT `/knowledge/{knowledge_id}` — update
+- DELETE `/knowledge/{knowledge_id}` — hapus
+- DELETE `/knowledge` — hapus massal (sesuai implementasi body)
 
-#### DELETE `/knowledge/{knowledge_id}`
-Delete knowledge item
+### Chat
 
-### Chat System
+- POST `/chat` — kirim pertanyaan + history, menerima jawaban AI
 
-#### POST `/chat`
-Chat dengan AI menggunakan RAG
-```json
-{
-  "message": "Pertanyaan Anda",
-  "history": [
-    {
-      "role": "user",
-      "content": "Pertanyaan sebelumnya"
-    },
-    {
-      "role": "assistant", 
-      "content": "Jawaban AI"
-    }
-  ]
-}
-```
+### System Prompts (`/system-prompts`)
 
-### File Upload
+- GET `/system-prompts/` — list prompts
+- GET `/system-prompts/active` — prompt aktif
+- POST `/system-prompts/` — buat prompt
+- PUT `/system-prompts/{prompt_id}` — update prompt
+- DELETE `/system-prompts/{prompt_id}` — hapus prompt
+- POST `/system-prompts/{prompt_id}/activate` — aktifkan prompt
+- POST `/system-prompts/initialize` — inisialisasi default
+- POST `/system-prompts/reset-to-default` — reset ke default
 
-#### POST `/upload-file`
-Upload dan proses file (PDF, TXT, Excel, CSV)
-```bash
-curl -X POST "http://localhost:7860/upload-file" \
-     -H "accept: application/json" \
-     -H "Content-Type: multipart/form-data" \
-     -F "file=@document.pdf"
-```
+Sebagian besar endpoint memerlukan `Authorization: Bearer <token>`.
+
+### Files (`/files`)
+
+- POST `/files/upload` — upload file
+- POST `/files/upload-file` — upload alternatif
+- POST `/files/upload-csv-custom` — unggah CSV custom
+- POST `/files/upload-excel-custom` — unggah Excel custom
+- GET `/files/` — daftar file
+- GET `/files/{file_id}` — detail file
+- DELETE `/files/{file_id}` — hapus file
+- GET `/files/{file_id}/download` — unduh
+- GET `/files/{file_id}/signed-url` — signed URL
+- GET `/files/{file_id}/pdf` — pratinjau PDF
+- POST `/files/{file_id}/reprocess-ocr` — proses ulang OCR
+
+Endpoint Files membutuhkan token bearer untuk akses yang dilindungi.
 
 ## 📁 File Upload
 

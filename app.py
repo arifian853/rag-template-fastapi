@@ -1,47 +1,33 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routes import knowledge_routes, chat_routes, system_prompt_routes, file_routes, auth_route
 import uvicorn
 
-# Import routes
-from routes.chat_routes import router as chat_router
-from routes.knowledge_routes import router as knowledge_router
-from routes.system_prompt_routes import router as system_prompt_router
-from routes.file_routes import router as file_router
+app = FastAPI(title="RAG Knowledge Management API", version="1.0.0")
 
-# Initialize FastAPI app
-app = FastAPI(title="RAG Chatbot API", version="2.0.0")
-
-# Add CORS middleware
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Add your frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(chat_router, tags=["Chat"])
-app.include_router(knowledge_router, tags=["Knowledge"])
-app.include_router(system_prompt_router, prefix="/system-prompts", tags=["System Prompts"])
-app.include_router(file_router, prefix="/files", tags=["Files"])
+# Include routers with proper prefixes
+app.include_router(auth_route.router, prefix="/auth", tags=["auth"])
+app.include_router(knowledge_routes.router, tags=["knowledge"])
+app.include_router(chat_routes.router, tags=["chat"])
+app.include_router(system_prompt_routes.router, prefix="/system-prompts", tags=["system-prompts"])
+app.include_router(file_routes.router, prefix="/files", tags=["files"])
 
-# Add backward compatibility endpoints at root level
-from routes.file_routes import upload_file_legacy, upload_csv_custom, upload_excel_custom
-
-app.post("/upload-file", tags=["Files - Legacy"])(upload_file_legacy)
-app.post("/upload-csv-custom", tags=["Files - Legacy"])(upload_csv_custom)
-app.post("/upload-excel-custom", tags=["Files - Legacy"])(upload_excel_custom)
-
-# Health check endpoint
 @app.get("/")
 async def root():
-    return {"message": "RAG Chatbot API is running", "version": "2.0.0"}
+    return {"message": "RAG Knowledge Management API is running"}
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-# Run the app
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=7860, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=7860)

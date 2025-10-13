@@ -47,6 +47,40 @@ class FileMetadata(BaseModel):
     knowledge_ids: List[str] = []
     metadata: Optional[Dict[str, Any]] = None
 
+# User Authentication Models
+class User(BaseModel):
+    username: str
+    password: str
+    created_at: Optional[datetime] = None
+    is_active: bool = True
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    created_at: datetime
+    is_active: bool
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
 class PaginationParams(BaseModel):
     page: int = 1
     limit: int = 15
