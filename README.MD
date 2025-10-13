@@ -2,18 +2,6 @@
 
 Backend API untuk sistem manajemen pengetahuan dengan teknologi Retrieval-Augmented Generation (RAG) menggunakan FastAPI, MongoDB, dan Google Gemini AI.
 
-## 📋 Daftar Isi
-
-- [Fitur Utama](#-fitur-utama)
-- [Tech Stack](#-tech-stack)
-- [Struktur Proyek](#-struktur-proyek)
-- [Quick Start](#-quick-start)
-- [Konfigurasi](#-konfigurasi)
-- [API Endpoints](#-api-endpoints)
-- [File Upload](#-file-upload)
-- [Docker Deployment](#-docker-deployment)
-- [Database Setup](#-database-setup)
-
 ## 🚀 Fitur Utama
 
 ### 📚 Knowledge Management
