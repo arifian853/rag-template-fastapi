@@ -123,8 +123,18 @@ API akan tersedia di: `http://localhost:7860`
 
 ### Environment Variables (.env)
 ```env
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/chatbot_cs
-GOOGLE_API_KEY=your_google_ai_api_key_here
+MONGODB_URI=YOUR_MONGODB_URI
+GOOGLE_API_KEY=YOUR_GOOGLE_API_KEY
+
+# Cloudinary Configuration
+CLOUDINARY_CLOUD_NAME=YOUR_CLOUDINARY_CLOUD_NAME
+CLOUDINARY_API_KEY=YOUR_CLOUDINARY_API_KEY
+CLOUDINARY_API_SECRET=YOUR_CLOUDINARY_API_SECRET
+
+# JWT Configuration
+SECRET_KEY=your-super-secret-jwt-key-change-this-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
 ### MongoDB Setup
