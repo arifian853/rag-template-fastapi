@@ -20,7 +20,7 @@ from .auth_route import get_current_user
 router = APIRouter()
 
 # File upload endpoints (dapat diakses dengan atau tanpa prefix)
-@router.post("/upload")
+@router.post("/upload-file")
 async def upload_file(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload file, save to Cloudinary, and create knowledge entries (text-based PDFs only)"""
     try:

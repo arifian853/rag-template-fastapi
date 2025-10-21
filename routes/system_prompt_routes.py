@@ -57,17 +57,17 @@ async def update_system_prompt(prompt_id: str, prompt_data: UpdateSystemPrompt, 
     try:
         update_data = {}
         
-        if prompt.name is not None:
-            update_data["name"] = prompt.name
-        if prompt.prompt is not None:
-            update_data["prompt"] = prompt.prompt
-        if prompt.description is not None:
-            update_data["description"] = prompt.description
-        if prompt.is_active is not None:
-            update_data["is_active"] = prompt.is_active
+        if prompt_data.name is not None:
+            update_data["name"] = prompt_data.name
+        if prompt_data.prompt is not None:
+            update_data["prompt"] = prompt_data.prompt
+        if prompt_data.description is not None:
+            update_data["description"] = prompt_data.description
+        if prompt_data.is_active is not None:
+            update_data["is_active"] = prompt_data.is_active
             
             # If setting this as active, deactivate all others
-            if prompt.is_active:
+            if prompt_data.is_active:
                 await system_prompt_collection.update_many(
                     {"_id": {"$ne": ObjectId(prompt_id)}, "is_active": True},
                     {"$set": {"is_active": False}}

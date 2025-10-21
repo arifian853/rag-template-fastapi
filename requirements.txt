@@ -11,9 +11,6 @@ PyPDF2
 python-multipart
 openpyxl
 cloudinary
-pdf2image
-pytesseract
-Pillow
 python-jose[cryptography]
 werkzeug
 python-multipart

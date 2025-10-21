@@ -8,13 +8,42 @@ import cloudinary.uploader
 import cloudinary.api
 import cloudinary.utils
 from dotenv import load_dotenv
+import ssl
 
 # Load environment variables
 load_dotenv()
 
-# MongoDB connection
+# MongoDB connection with proper SSL and connection settings
 MONGODB_URI = os.getenv("MONGODB_URI")
-client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URI, server_api=ServerApi('1'))
+
+# Create SSL context for MongoDB Atlas
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
+# Motor client with optimized settings
+client = motor.motor_asyncio.AsyncIOMotorClient(
+    MONGODB_URI, 
+    server_api=ServerApi('1'),
+    # SSL Configuration
+    tls=True,
+    tlsAllowInvalidCertificates=True,
+    tlsAllowInvalidHostnames=True,
+    # Connection Pool Settings
+    maxPoolSize=50,
+    minPoolSize=5,
+    maxIdleTimeMS=30000,
+    # Timeout Settings
+    serverSelectionTimeoutMS=5000,
+    socketTimeoutMS=20000,
+    connectTimeoutMS=20000,
+    # Retry Settings
+    retryWrites=True,
+    retryReads=True,
+    # Heartbeat
+    heartbeatFrequencyMS=10000
+)
+
 db = client.get_database("chatbot_cs")
 knowledge_collection = db.get_collection("rag_data_knowledge")
 system_prompt_collection = db.get_collection("system_prompts")
