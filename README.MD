@@ -14,7 +14,7 @@ Backend API untuk sistem manajemen pengetahuan dengan teknologi Retrieval-Augmen
   - Mendukung chat history
 - File Processing
   - Upload & kelola file: PDF, TXT, CSV, Excel
-  - Ekstraksi teks (OCR untuk PDF gambar)
+  - Ekstraksi teks (Tidak mendukung PDF gambar)
   - Metadata & tautan unduh
 - System Prompt Manager
   - Kelola prompt (create, update, delete)
@@ -206,7 +206,7 @@ Endpoint Files membutuhkan token bearer untuk akses yang dilindungi.
 #### PDF Files (.pdf)
 - Ekstraksi teks otomatis
 - Preservasi metadata PDF
-- Support untuk PDF dengan teks dan gambar
+- Support untuk PDF dengan teks selectable saja
 
 #### Text Files (.txt)
 - Import langsung konten teks
