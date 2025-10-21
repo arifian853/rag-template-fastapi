@@ -2,8 +2,6 @@ import pandas as pd
 import PyPDF2
 import io
 import csv
-import pytesseract
-from pdf2image import convert_from_bytes
 from fastapi import HTTPException
 from typing import List, Dict, Any, Tuple
 
@@ -108,48 +106,3 @@ async def process_csv_file(file_content: bytes, filename: str) -> List[Dict[str,
         return knowledge_items
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error processing CSV file: {str(e)}")
-
-async def extract_text_with_ocr(pdf_content: bytes, filename: str):
-    """Extract text from PDF using OCR for scanned documents"""
-    try:
-        print(f"Starting OCR processing for {filename}")
-        
-        # Convert PDF pages to images
-        images = convert_from_bytes(pdf_content, dpi=300, fmt='jpeg')
-        print(f"Converted PDF to {len(images)} images")
-        
-        extracted_texts = []
-        
-        for i, image in enumerate(images):
-            print(f"Processing page {i+1}/{len(images)}")
-            
-            # Use Tesseract OCR to extract text
-            # Configure for Indonesian and English
-            custom_config = r'--oem 3 --psm 6 -l ind+eng'
-            
-            try:
-                text = pytesseract.image_to_string(image, config=custom_config)
-                if text.strip():  # Only add if text found
-                    extracted_texts.append(f"Page {i+1}:\n{text.strip()}")
-                    print(f"Page {i+1}: Found {len(text.strip())} characters")
-                else:
-                    print(f"Page {i+1}: No text detected")
-            except Exception as ocr_error:
-                print(f"OCR error on page {i+1}: {str(ocr_error)}")
-                # Fallback: try with different PSM mode
-                try:
-                    fallback_config = r'--oem 3 --psm 3 -l eng'
-                    text = pytesseract.image_to_string(image, config=fallback_config)
-                    if text.strip():
-                        extracted_texts.append(f"Page {i+1} (fallback):\n{text.strip()}")
-                except:
-                    extracted_texts.append(f"Page {i+1}: [OCR failed - image content]")
-        
-        full_text = "\n\n".join(extracted_texts) if extracted_texts else ""
-        print(f"OCR completed. Total text length: {len(full_text)}")
-        
-        return full_text
-        
-    except Exception as e:
-        print(f"OCR processing failed: {str(e)}")
-        return f"[OCR Error: {str(e)} - This appears to be a scanned document that couldn't be processed]"

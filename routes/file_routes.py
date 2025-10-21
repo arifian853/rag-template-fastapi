@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, File, UploadFile, Form, Response, 
 from models import KnowledgeItem
 from services.knowledge_service import add_knowledge
 from services.file_service import save_file_metadata
-from utils.file_processing import extract_text_with_ocr
 from utils.cloudinary_helper import upload_file_to_cloudinary
 from config import files_collection, knowledge_collection
 from bson import ObjectId
@@ -23,7 +22,7 @@ router = APIRouter()
 # File upload endpoints (dapat diakses dengan atau tanpa prefix)
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    """Upload file, save to Cloudinary, and create knowledge entries with OCR support"""
+    """Upload file, save to Cloudinary, and create knowledge entries (text-based PDFs only)"""
     try:
         file_content = await file.read()
         file_extension = file.filename.split('.')[-1].lower()
@@ -35,7 +34,7 @@ async def upload_file(file: UploadFile = File(...), current_user: dict = Depends
         knowledge_ids = []
         
         if file_extension == 'pdf':
-            # Try normal PDF text extraction first
+            # PDF processing - text-based only
             pdf_file = io.BytesIO(file_content)
             pdf_reader = PyPDF2.PdfReader(pdf_file)
             
@@ -43,23 +42,14 @@ async def upload_file(file: UploadFile = File(...), current_user: dict = Depends
             for page in pdf_reader.pages:
                 full_text += page.extract_text() + "\n"
             
-            # Check if we got meaningful text
+            # Check if PDF has extractable text
             meaningful_text = full_text.strip().replace('\n', ' ').replace(' ', '')
             
-            if len(meaningful_text) < 50:  # Threshold for "no meaningful text"
-                print(f"PDF appears to be scanned/image-based. Attempting OCR...")
-                
-                # Fallback to OCR
-                ocr_text = await extract_text_with_ocr(file_content, file.filename)
-                
-                if ocr_text and len(ocr_text.strip()) > 50:
-                    full_text = f"[OCR Extracted Content]\n\n{ocr_text}"
-                    print(f"OCR successful: {len(ocr_text)} characters extracted")
-                else:
-                    full_text = f"[Scanned Document - Limited Text Extraction]\n\nThis appears to be a scanned document or image-based PDF. Text extraction was attempted but may be incomplete.\n\nOriginal filename: {file.filename}\nPages: {len(pdf_reader.pages)}\n\nNote: This document may contain visual content (images, charts, diagrams) that cannot be processed as text."
-                    print("OCR failed or returned minimal text")
-            else:
-                print(f"PDF text extraction successful: {len(meaningful_text)} characters")
+            if len(meaningful_text) < 50:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="This PDF appears to be scanned or image-based. Only text-based PDFs are supported. Please use a PDF with selectable text content."
+                )
             
             # Create knowledge entry
             knowledge = KnowledgeItem(
@@ -71,7 +61,7 @@ async def upload_file(file: UploadFile = File(...), current_user: dict = Depends
                     "filename": file.filename,
                     "pages": len(pdf_reader.pages),
                     "cloudinary_url": cloudinary_data["url"],
-                    "processing_method": "ocr" if "OCR Extracted" in full_text else "standard",
+                    "processing_method": "standard",
                     "text_length": len(full_text)
                 }
             )
@@ -132,31 +122,17 @@ async def upload_file(file: UploadFile = File(...), current_user: dict = Depends
             knowledge_ids=knowledge_ids
         )
         
-        processing_info = ""
-        if file_extension == 'pdf':
-            if "OCR Extracted" in full_text:
-                processing_info = " (OCR processed for scanned content)"
-            elif "Limited Text Extraction" in full_text:
-                processing_info = " (Scanned document - limited text extraction)"
-        
         return {
-            "message": f"File uploaded successfully to Cloudinary and processed for knowledge{processing_info}",
+            "message": f"File uploaded successfully to Cloudinary and processed for knowledge",
             "file_id": file_id,
             "cloudinary_url": cloudinary_data["url"],
             "knowledge_ids": knowledge_ids,
-            "items_created": len(knowledge_ids),
-            "processing_note": processing_info.strip()
+            "items_created": len(knowledge_ids)
         }
         
     except Exception as e:
         print(f"Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-# Keep the old endpoint name for backward compatibility
-@router.post("/upload-file")
-async def upload_file_legacy(file: UploadFile = File(...)):
-    """Legacy endpoint - redirects to /upload"""
-    return await upload_file(file)
 
 @router.post("/upload-csv-custom")
 async def upload_csv_custom(
@@ -495,68 +471,4 @@ async def download_file(file_id: str):
         print(f"Download file error: {str(e)}")
         if "ObjectId" in str(e):
             raise HTTPException(status_code=400, detail="Invalid file ID format")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/{file_id}/reprocess-ocr")
-async def reprocess_with_ocr(file_id: str):
-    """Re-process PDF file with OCR if initial processing failed"""
-    try:
-        # Get file metadata
-        file_doc = await files_collection.find_one({"_id": ObjectId(file_id)})
-        if not file_doc:
-            raise HTTPException(status_code=404, detail="File not found")
-        
-        if file_doc.get("file_type") != "pdf":
-            raise HTTPException(status_code=400, detail="OCR reprocessing only available for PDF files")
-        
-        # Get PDF content from base64 storage
-        response = requests.get(file_doc["cloudinary_url"])
-        
-        if response.status_code == 200:
-            content = response.text
-            if content.startswith("PDF_DATA:"):
-                pdf_base64 = content[9:]
-                pdf_bytes = base64.b64decode(pdf_base64)
-                
-                # Process with OCR
-                ocr_text = await extract_text_with_ocr(pdf_bytes, file_doc["original_filename"])
-                
-                if ocr_text and len(ocr_text.strip()) > 50:
-                    # Update existing knowledge entry
-                    if file_doc.get("knowledge_ids"):
-                        knowledge_id = file_doc["knowledge_ids"][0]
-                        
-                        updated_content = f"[OCR Re-processed Content]\n\n{ocr_text}"
-                        
-                        # Generate new embedding
-                        embedding = await generate_embedding(updated_content)
-                        
-                        # Update knowledge
-                        await knowledge_collection.update_one(
-                            {"_id": ObjectId(knowledge_id)},
-                            {"$set": {
-                                "content": updated_content,
-                                "embedding": embedding,
-                                "metadata.processing_method": "ocr_reprocessed",
-                                "metadata.reprocessed_at": datetime.now().isoformat()
-                            }}
-                        )
-                        
-                        return {
-                            "message": "PDF reprocessed with OCR successfully",
-                            "text_length": len(ocr_text),
-                            "knowledge_updated": True
-                        }
-                    else:
-                        raise HTTPException(status_code=404, detail="No knowledge entries found for this file")
-                else:
-                    raise HTTPException(status_code=422, detail="OCR processing failed or returned minimal text")
-            else:
-                raise HTTPException(status_code=400, detail="Invalid PDF storage format")
-        else:
-            raise HTTPException(status_code=500, detail="Failed to fetch PDF content")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
