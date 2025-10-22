@@ -1,44 +1,36 @@
-# Use Python 3.11 slim image for better performance and smaller size
-FROM python:3.11-slim
+FROM python:3.11-bookworm
 
-# Set working directory
-WORKDIR /app
-
-# Set environment variables
+# Lingkungan
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
+WORKDIR /code
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates openssl curl \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better Docker layer caching
+# Copy requirements & install
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy app
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p templates static
-
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash app && \
-    chown -R app:app /app
+# Non-root user
+RUN useradd --create-home --shell /bin/bash app && chown -R app:app /code
 USER app
 
-# Expose port
+# Expose default (HF Spaces inject PORT env)
 EXPOSE 7860
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:7860/knowledge')" || exit 1
+# Healthcheck: pakai /health (tidak butuh DB/Auth) dan curl
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD curl -fsS http://localhost:${PORT:-7860}/health || exit 1
 
-# Run the application
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+# Jalankan uvicorn dengan PORT dari env Spaces
+# Pastikan module path sesuai: app.main:app (ganti jika berbeda)
+CMD ["bash", "-lc", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]

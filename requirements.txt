@@ -1,16 +1,33 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-dotenv
+
+# Mongo/Motor + TLS stack
 motor
 pymongo
+dnspython
+certifi
+cryptography
+
+# Embeddings & friends
 sentence-transformers
 huggingface_hub
+
+# LLM
 google-generativeai
+
+# File processing
 pandas
 PyPDF2
-python-multipart
 openpyxl
+python-multipart
+
+# Cloud storage
 cloudinary
+
+# Auth
 python-jose[cryptography]
 werkzeug
-python-multipart
+
+# (opsional) requests
+requests
