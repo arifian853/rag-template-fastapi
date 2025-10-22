@@ -137,6 +137,23 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
+### Create Admin Account (First Time Only)
+```bash
+python create_admin.py
+```
+
+**⚠️ IMPORTANT SECURITY NOTES:**
+- Script ini **HANYA dijalankan SEKALI** saat setup awal
+- Password admin akan di-generate secara random dan aman
+- **SIMPAN password yang ditampilkan** - tidak akan ditampilkan lagi!
+- Ganti password setelah login pertama kali
+- **HAPUS file `create_admin.py`** setelah digunakan untuk keamanan
+- Script akan menolak membuat admin baru jika sudah ada
+
+**Login Credentials:**
+- Username: `admin`
+- Password: `[lihat output dari script create_admin.py]`
+
 ### MongoDB Setup
 - Database: `chatbot_cs` (Silakan sesuaikan dengan nama database yang digunakan)
 - Collection: `rag_data_knowledge` (Silakan sesuaikan dengan nama collection yang digunakan)
